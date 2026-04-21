@@ -10,6 +10,8 @@ import org.lwjgl.glfw.GLFW;
 
 public class BuffClient implements ClientModInitializer {
     private static KeyMapping openMenuKey;
+    private static KeyMapping toggleTriggerBotKey;
+    private static KeyMapping switchTriggerModeKey;
 
     @Override
     public void onInitializeClient() {
@@ -21,11 +23,37 @@ public class BuffClient implements ClientModInitializer {
             "category.buff.main"
         ));
 
+        // Hotkey bật/tắt Trigger Bot (mặc định: không gán phím)
+        toggleTriggerBotKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+            "key.buff.trigger_bot.toggle",
+            InputConstants.Type.KEYSYM,
+            InputConstants.UNKNOWN.getValue(),
+            "category.buff.main"
+        ));
+
+        // Hotkey đổi mode Trigger Bot (mặc định: không gán phím)
+        switchTriggerModeKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+            "key.buff.trigger_bot.switch_mode",
+            InputConstants.Type.KEYSYM,
+            InputConstants.UNKNOWN.getValue(),
+            "category.buff.main"
+        ));
+
         // 2. Lắng nghe sự kiện Tick của Client
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Xử lý mở Menu khi nhấn phím
             while (openMenuKey.consumeClick()) {
                 client.setScreen(new BuffMainMenu());
+            }
+
+            // Bật/tắt Trigger Bot
+            while (toggleTriggerBotKey.consumeClick()) {
+                Config.triggerBot = !Config.triggerBot;
+            }
+
+            // Đổi mode Trigger Bot (Check Cooldown <-> Spam Click)
+            while (switchTriggerModeKey.consumeClick()) {
+                Config.ignoreCooldown = !Config.ignoreCooldown;
             }
         });
     }
