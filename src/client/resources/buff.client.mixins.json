@@ -1,0 +1,21 @@
+{
+	"required": true,
+	"package": "bao.buff.client.mixin",
+	"refmap": "buff.client.refmap.json",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"ExampleClientMixin",
+		"EntityRenderDispatcherMixin",
+		"ItemInHandRendererMixin",
+		"MinecraftAccessor",
+		"PlayerMixin",
+		"MultiPlayerGameModeMixin",
+		"TriggerBotMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
