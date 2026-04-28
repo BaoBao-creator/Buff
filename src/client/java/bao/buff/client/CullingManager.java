@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
@@ -15,9 +16,12 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 public final class CullingManager {
     private static final Int2ObjectOpenHashMap<VisibilityCache> VISIBILITY_CACHE = new Int2ObjectOpenHashMap<>();
     private static final double IMMEDIATE_RENDER_DISTANCE_SQR = 4.0;
-    private static final double FULL_SAMPLE_DISTANCE_SQR = 16.0 * 16.0;
+    private static final double PLAYER_FULL_SAMPLE_DISTANCE_SQR = 16.0 * 16.0;
+    private static final double ITEM_FULL_SAMPLE_DISTANCE_SQR = 10.0 * 10.0;
+    private static final double ITEM_CENTER_ONLY_DISTANCE_SQR = 24.0 * 24.0;
     private static final int NEAR_REFRESH_TICKS = 2;
     private static final int FAR_REFRESH_TICKS = 5;
+    private static final int ITEM_FAR_REFRESH_TICKS = 8;
     private static final int CACHE_TTL_TICKS = 40;
     private static final double SAMPLE_INSET = 0.15;
 
@@ -62,16 +66,9 @@ public final class CullingManager {
             return true;
         }
 
-        Minecraft client = Minecraft.getInstance();
-        if (client.level == null || client.player == null) {
-            cachedLevel = null;
-            resetCache();
+        Minecraft client = getReadyClient();
+        if (client == null) {
             return true;
-        }
-
-        if (client.level != cachedLevel) {
-            cachedLevel = client.level;
-            resetCache();
         }
 
         if (target == client.player || target == client.getCameraEntity()) {
@@ -96,7 +93,7 @@ public final class CullingManager {
         }
 
         long gameTime = client.level.getGameTime();
-        int refreshInterval = distanceSqr <= FULL_SAMPLE_DISTANCE_SQR ? NEAR_REFRESH_TICKS : FAR_REFRESH_TICKS;
+        int refreshInterval = distanceSqr <= PLAYER_FULL_SAMPLE_DISTANCE_SQR ? NEAR_REFRESH_TICKS : FAR_REFRESH_TICKS;
         int cameraBlockX = floorToInt(cameraPosition.x);
         int cameraBlockY = floorToInt(cameraPosition.y);
         int cameraBlockZ = floorToInt(cameraPosition.z);
@@ -109,9 +106,68 @@ public final class CullingManager {
             return cache.visible;
         }
 
-        boolean visible = distanceSqr <= FULL_SAMPLE_DISTANCE_SQR
+        boolean visible = distanceSqr <= PLAYER_FULL_SAMPLE_DISTANCE_SQR
             ? hasVisibleSamples(target, cameraPosition, bounds)
             : isPathClear(target, cameraPosition, target.getX(), target.getEyeY(), target.getZ());
+
+        if (cache == null) {
+            cache = new VisibilityCache();
+            VISIBILITY_CACHE.put(target.getId(), cache);
+        }
+
+        cache.update(gameTime, cameraBlockX, cameraBlockY, cameraBlockZ, targetBlockX, targetBlockY, targetBlockZ, visible);
+        return visible;
+    }
+
+    public static boolean shouldRenderItem(ItemEntity target, Vec3 cameraPosition) {
+        if (!Config.itemCulling) {
+            return true;
+        }
+
+        Minecraft client = getReadyClient();
+        if (client == null) {
+            return true;
+        }
+
+        if (target == client.getCameraEntity()) {
+            return true;
+        }
+
+        AABB bounds = target.getBoundingBox();
+        if (bounds.contains(cameraPosition)) {
+            return true;
+        }
+
+        double dx = target.getX() - cameraPosition.x;
+        double dy = target.getY(0.5) - cameraPosition.y;
+        double dz = target.getZ() - cameraPosition.z;
+        double distanceSqr = dx * dx + dy * dy + dz * dz;
+        if (distanceSqr <= IMMEDIATE_RENDER_DISTANCE_SQR) {
+            return true;
+        }
+
+        long gameTime = client.level.getGameTime();
+        int refreshInterval = distanceSqr <= ITEM_FULL_SAMPLE_DISTANCE_SQR ? NEAR_REFRESH_TICKS : ITEM_FAR_REFRESH_TICKS;
+        int cameraBlockX = floorToInt(cameraPosition.x);
+        int cameraBlockY = floorToInt(cameraPosition.y);
+        int cameraBlockZ = floorToInt(cameraPosition.z);
+        int targetBlockX = target.getBlockX();
+        int targetBlockY = target.getBlockY();
+        int targetBlockZ = target.getBlockZ();
+
+        VisibilityCache cache = VISIBILITY_CACHE.get(target.getId());
+        if (cache != null && cache.isValid(gameTime, refreshInterval, cameraBlockX, cameraBlockY, cameraBlockZ, targetBlockX, targetBlockY, targetBlockZ)) {
+            return cache.visible;
+        }
+
+        boolean visible;
+        if (distanceSqr <= ITEM_FULL_SAMPLE_DISTANCE_SQR) {
+            visible = hasVisibleItemSamples(target, cameraPosition, bounds);
+        } else if (distanceSqr <= ITEM_CENTER_ONLY_DISTANCE_SQR) {
+            visible = isPathClear(target, cameraPosition, target.getX(), target.getY(0.5), target.getZ());
+        } else {
+            visible = true;
+        }
 
         if (cache == null) {
             cache = new VisibilityCache();
@@ -159,8 +215,53 @@ public final class CullingManager {
             .getType() == HitResult.Type.MISS;
     }
 
+    private static boolean hasVisibleItemSamples(ItemEntity target, Vec3 cameraPosition, AABB bounds) {
+        double centerX = target.getX();
+        double centerY = target.getY(0.5);
+        double centerZ = target.getZ();
+        double halfWidth = Math.max(0.01, bounds.getXsize() * 0.25);
+        double halfHeight = Math.max(0.01, bounds.getYsize() * 0.25);
+        double halfDepth = Math.max(0.01, bounds.getZsize() * 0.25);
+
+        return isPathClear(target, cameraPosition, centerX, centerY, centerZ)
+            || isPathClear(target, cameraPosition, centerX + halfWidth, centerY, centerZ)
+            || isPathClear(target, cameraPosition, centerX - halfWidth, centerY, centerZ)
+            || isPathClear(target, cameraPosition, centerX, centerY + halfHeight, centerZ)
+            || isPathClear(target, cameraPosition, centerX, centerY, centerZ + halfDepth);
+    }
+
+    private static boolean isPathClear(ItemEntity target, Vec3 cameraPosition, double sampleX, double sampleY, double sampleZ) {
+        return target.level()
+            .clip(
+                new ClipContext(
+                    cameraPosition,
+                    new Vec3(sampleX, sampleY, sampleZ),
+                    ClipContext.Block.VISUAL,
+                    ClipContext.Fluid.NONE,
+                    CollisionContext.empty()
+                )
+            )
+            .getType() == HitResult.Type.MISS;
+    }
+
     private static int floorToInt(double value) {
         return (int)Math.floor(value);
+    }
+
+    private static Minecraft getReadyClient() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || client.player == null) {
+            cachedLevel = null;
+            resetCache();
+            return null;
+        }
+
+        if (client.level != cachedLevel) {
+            cachedLevel = client.level;
+            resetCache();
+        }
+
+        return client;
     }
 
     private static final class VisibilityCache {
