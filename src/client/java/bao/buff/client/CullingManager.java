@@ -201,7 +201,7 @@ public final class CullingManager {
             || isPathClear(target, cameraPosition, midX, midY, backZ);
     }
 
-    private static boolean isPathClear(Player target, Vec3 cameraPosition, double sampleX, double sampleY, double sampleZ) {
+    private static boolean isPathClear(Entity target, Vec3 cameraPosition, double sampleX, double sampleY, double sampleZ) {
         return target.level()
             .clip(
                 new ClipContext(
@@ -228,20 +228,6 @@ public final class CullingManager {
             || isPathClear(target, cameraPosition, centerX - halfWidth, centerY, centerZ)
             || isPathClear(target, cameraPosition, centerX, centerY + halfHeight, centerZ)
             || isPathClear(target, cameraPosition, centerX, centerY, centerZ + halfDepth);
-    }
-
-    private static boolean isPathClear(ItemEntity target, Vec3 cameraPosition, double sampleX, double sampleY, double sampleZ) {
-        return target.level()
-            .clip(
-                new ClipContext(
-                    cameraPosition,
-                    new Vec3(sampleX, sampleY, sampleZ),
-                    ClipContext.Block.VISUAL,
-                    ClipContext.Fluid.NONE,
-                    CollisionContext.empty()
-                )
-            )
-            .getType() == HitResult.Type.MISS;
     }
 
     private static int floorToInt(double value) {
