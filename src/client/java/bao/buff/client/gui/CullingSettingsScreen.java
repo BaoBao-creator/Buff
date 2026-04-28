@@ -26,6 +26,13 @@ public class CullingSettingsScreen extends Screen {
             button.setMessage(getPlayerCullingLabel());
         }).bounds(centerX, 60, 200, 20).build());
 
+        this.addRenderableWidget(Button.builder(getItemCullingLabel(), button -> {
+            Config.itemCulling = !Config.itemCulling;
+            CullingManager.resetCache();
+            Config.save();
+            button.setMessage(getItemCullingLabel());
+        }).bounds(centerX, 85, 200, 20).build());
+
         this.addRenderableWidget(Button.builder(Component.literal("Back"), button -> {
             this.minecraft.setScreen(lastScreen);
         }).bounds(centerX, this.height - 40, 200, 20).build());
@@ -39,5 +46,9 @@ public class CullingSettingsScreen extends Screen {
 
     private Component getPlayerCullingLabel() {
         return Component.literal("Player Culling: " + Config.getPlayerCullingStatusName());
+    }
+
+    private Component getItemCullingLabel() {
+        return Component.literal("Item Culling: " + Config.getItemCullingStatusName());
     }
 }
