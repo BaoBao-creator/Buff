@@ -17,8 +17,11 @@ public final class CullingManager {
     private static final Int2ObjectOpenHashMap<VisibilityCache> VISIBILITY_CACHE = new Int2ObjectOpenHashMap<>();
     private static final double IMMEDIATE_RENDER_DISTANCE_SQR = 4.0;
     private static final double FULL_SAMPLE_DISTANCE_SQR = 16.0 * 16.0;
+    private static final double REDUCED_SAMPLE_DISTANCE_SQR = 24.0 * 24.0;
     private static final int NEAR_REFRESH_TICKS = 2;
     private static final int FAR_REFRESH_TICKS = 5;
+    private static final int ITEM_NEAR_REFRESH_TICKS = 3;
+    private static final int ITEM_FAR_REFRESH_TICKS = 8;
     private static final int CACHE_TTL_TICKS = 40;
     private static final double SAMPLE_INSET = 0.15;
 
@@ -158,7 +161,7 @@ public final class CullingManager {
         }
 
         long gameTime = client.level.getGameTime();
-        int refreshInterval = distanceSqr <= FULL_SAMPLE_DISTANCE_SQR ? NEAR_REFRESH_TICKS : FAR_REFRESH_TICKS;
+        int refreshInterval = distanceSqr <= FULL_SAMPLE_DISTANCE_SQR ? ITEM_NEAR_REFRESH_TICKS : ITEM_FAR_REFRESH_TICKS;
         int cameraBlockX = floorToInt(cameraPosition.x);
         int cameraBlockY = floorToInt(cameraPosition.y);
         int cameraBlockZ = floorToInt(cameraPosition.z);
@@ -171,9 +174,10 @@ public final class CullingManager {
             return cache.visible;
         }
 
-        boolean visible = distanceSqr <= FULL_SAMPLE_DISTANCE_SQR
-            ? hasVisibleItemSamples(target, cameraPosition, bounds)
-            : isPathClear(target, cameraPosition, target.getX(), target.getY(0.5), target.getZ());
+        double centerX = target.getX();
+        double centerY = target.getY(0.5);
+        double centerZ = target.getZ();
+        boolean visible = hasVisibleItemSamples(target, cameraPosition, bounds, centerX, centerY, centerZ, distanceSqr);
 
         if (cache == null) {
             cache = new VisibilityCache();
@@ -221,13 +225,28 @@ public final class CullingManager {
             .getType() == HitResult.Type.MISS;
     }
 
-    private static boolean hasVisibleItemSamples(ItemEntity target, Vec3 cameraPosition, AABB bounds) {
-        double centerX = target.getX();
-        double centerY = target.getY(0.5);
-        double centerZ = target.getZ();
+    private static boolean hasVisibleItemSamples(
+        ItemEntity target,
+        Vec3 cameraPosition,
+        AABB bounds,
+        double centerX,
+        double centerY,
+        double centerZ,
+        double distanceSqr
+    ) {
+        if (distanceSqr > REDUCED_SAMPLE_DISTANCE_SQR) {
+            return isPathClear(target, cameraPosition, centerX, centerY, centerZ);
+        }
+
         double halfWidth = Math.max(0.01, bounds.getXsize() * 0.25);
         double halfHeight = Math.max(0.01, bounds.getYsize() * 0.25);
         double halfDepth = Math.max(0.01, bounds.getZsize() * 0.25);
+
+        if (distanceSqr > FULL_SAMPLE_DISTANCE_SQR) {
+            return isPathClear(target, cameraPosition, centerX, centerY, centerZ)
+                || isPathClear(target, cameraPosition, centerX, centerY + halfHeight, centerZ)
+                || isPathClear(target, cameraPosition, centerX, centerY, centerZ + halfDepth);
+        }
 
         return isPathClear(target, cameraPosition, centerX, centerY, centerZ)
             || isPathClear(target, cameraPosition, centerX + halfWidth, centerY, centerZ)
