@@ -5,7 +5,6 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"ExampleClientMixin",
-		"EntityRenderDispatcherMixin",
 		"ItemInHandRendererMixin",
 		"MinecraftAccessor",
 		"PlayerMixin",
