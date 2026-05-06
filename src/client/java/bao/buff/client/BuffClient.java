@@ -30,7 +30,6 @@ public class BuffClient implements ClientModInitializer {
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(StrongholdTracker::renderWorldMarker);
         ClientEntityEvents.ENTITY_LOAD.register(StrongholdTracker::onEntityLoad);
         ClientEntityEvents.ENTITY_UNLOAD.register(StrongholdTracker::onEntityUnload);
-        ClientEntityEvents.ENTITY_UNLOAD.register(CullingManager::onEntityUnload);
 
         openMenuKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
             "key.buff.open_menu",
@@ -68,7 +67,6 @@ public class BuffClient implements ClientModInitializer {
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            CullingManager.onClientTick(client);
             StrongholdTracker.onClientTick(client);
 
             while (openMenuKey.consumeClick()) {

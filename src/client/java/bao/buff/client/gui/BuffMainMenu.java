@@ -33,12 +33,6 @@ public class BuffMainMenu extends Screen {
         ));
 
         allFeatures.add(new Feature(
-            "Culling",
-            () -> Component.literal("Culling >"),
-            () -> openSubScreen(new CullingSettingsScreen(this))
-        ));
-
-        allFeatures.add(new Feature(
             "Trigger Bot",
             () -> Component.literal("Trigger Bot >"),
             () -> openSubScreen(new TriggerBotSettingsScreen(this))
