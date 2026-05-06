@@ -50,6 +50,12 @@ public class BuffMainMenu extends Screen {
             () -> openSubScreen(new SpearLungeSettingsScreen(this))
         ));
 
+        allFeatures.add(new Feature(
+            "Pearl Up",
+            () -> Component.literal("Pearl Up >"),
+            () -> openSubScreen(new PearlUpSettingsScreen(this))
+        ));
+
         allFeatures.sort(Comparator.comparing(feature -> feature.baseName));
     }
 
