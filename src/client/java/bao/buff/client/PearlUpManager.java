@@ -11,7 +11,9 @@ import net.minecraft.world.item.Items;
 public final class PearlUpManager {
     private static final float STRAIGHT_UP_PITCH = -90.0F;
 
+    private static boolean movingUpForPearl;
     private static int ticksUntilWindCharge;
+    private static int pearlSlot = -1;
     private static int windChargeSlot = -1;
     private static int originalSlot = -1;
 
@@ -19,6 +21,11 @@ public final class PearlUpManager {
     }
 
     public static void onClientTick(Minecraft client) {
+        if (movingUpForPearl) {
+            handleLookUpForPearl(client);
+            return;
+        }
+
         if (ticksUntilWindCharge <= 0) {
             return;
         }
@@ -32,18 +39,18 @@ public final class PearlUpManager {
     }
 
     public static ActivationResult tryActivate(Minecraft client) {
-        if (!Config.pearlUpEnabled || client == null || client.player == null || client.gameMode == null || client.screen != null) {
+        if (isBusy() || !Config.pearlUpEnabled || client == null || client.player == null || client.gameMode == null || client.screen != null) {
             return ActivationResult.NOT_READY;
         }
 
         Inventory inventory = client.player.getInventory();
-        int pearlSlot = findHotbarSlot(inventory, Items.ENDER_PEARL);
+        int foundPearlSlot = findHotbarSlot(inventory, Items.ENDER_PEARL);
         int foundWindChargeSlot = findHotbarSlot(inventory, Items.WIND_CHARGE);
 
-        if (pearlSlot == -1 && foundWindChargeSlot == -1) {
+        if (foundPearlSlot == -1 && foundWindChargeSlot == -1) {
             return ActivationResult.MISSING_BOTH;
         }
-        if (pearlSlot == -1) {
+        if (foundPearlSlot == -1) {
             return ActivationResult.MISSING_PEARL;
         }
         if (foundWindChargeSlot == -1) {
@@ -51,12 +58,34 @@ public final class PearlUpManager {
         }
 
         originalSlot = inventory.getSelectedSlot();
+        pearlSlot = foundPearlSlot;
         windChargeSlot = foundWindChargeSlot;
+        movingUpForPearl = true;
+        return ActivationResult.SUCCESS;
+    }
+
+    private static void handleLookUpForPearl(Minecraft client) {
+        if (client == null || client.player == null || client.gameMode == null) {
+            resetPendingUse();
+            return;
+        }
+
+        Inventory inventory = client.player.getInventory();
+        if (pearlSlot < 0 || pearlSlot >= 9 || inventory.getItem(pearlSlot).isEmpty() || !inventory.getItem(pearlSlot).is(Items.ENDER_PEARL)) {
+            resetPendingUse();
+            return;
+        }
+
+        float pitch = movePitchTowardStraightUp(client);
+        if (pitch > STRAIGHT_UP_PITCH) {
+            return;
+        }
+
         lookStraightUp(client);
         useHotbarSlot(client, inventory, pearlSlot);
         restoreSlot(client, inventory, originalSlot);
-        ticksUntilWindCharge = 1;
-        return ActivationResult.SUCCESS;
+        movingUpForPearl = false;
+        ticksUntilWindCharge = Config.pearlUpWindChargeDelayTicks;
     }
 
     private static void usePendingWindCharge(Minecraft client) {
@@ -92,12 +121,23 @@ public final class PearlUpManager {
         return -1;
     }
 
+    private static float movePitchTowardStraightUp(Minecraft client) {
+        float currentPitch = client.player.getXRot();
+        float nextPitch = Math.max(STRAIGHT_UP_PITCH, currentPitch - (float) Config.pearlUpPitchSpeed);
+        sendPitch(client, nextPitch);
+        return nextPitch;
+    }
+
     private static void lookStraightUp(Minecraft client) {
-        client.player.setXRot(STRAIGHT_UP_PITCH);
+        sendPitch(client, STRAIGHT_UP_PITCH);
+    }
+
+    private static void sendPitch(Minecraft client, float pitch) {
+        client.player.setXRot(pitch);
         if (client.getConnection() != null) {
             client.getConnection().send(new ServerboundMovePlayerPacket.Rot(
                 client.player.getYRot(),
-                STRAIGHT_UP_PITCH,
+                pitch,
                 client.player.onGround(),
                 client.player.horizontalCollision
             ));
@@ -127,8 +167,14 @@ public final class PearlUpManager {
         }
     }
 
+    private static boolean isBusy() {
+        return movingUpForPearl || ticksUntilWindCharge > 0;
+    }
+
     private static void resetPendingUse() {
+        movingUpForPearl = false;
         ticksUntilWindCharge = 0;
+        pearlSlot = -1;
         windChargeSlot = -1;
         originalSlot = -1;
     }

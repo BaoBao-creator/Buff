@@ -33,6 +33,8 @@ public class Config {
     public static boolean strongholdTrackerEnabled = false;
     public static boolean spearLungeEnabled = false;
     public static boolean pearlUpEnabled = false;
+    public static double pearlUpPitchSpeed = 15.0;
+    public static int pearlUpWindChargeDelayTicks = 1;
 
     public static int getAttributeSwapMode() {
         if (swapBreachMace) {
@@ -159,6 +161,12 @@ public class Config {
         if (data.pearlUpEnabled != null) {
             pearlUpEnabled = data.pearlUpEnabled;
         }
+        if (data.pearlUpPitchSpeed != null) {
+            pearlUpPitchSpeed = data.pearlUpPitchSpeed;
+        }
+        if (data.pearlUpWindChargeDelayTicks != null) {
+            pearlUpWindChargeDelayTicks = data.pearlUpWindChargeDelayTicks;
+        }
         normalize();
     }
 
@@ -175,11 +183,15 @@ public class Config {
         data.strongholdTrackerEnabled = strongholdTrackerEnabled;
         data.spearLungeEnabled = spearLungeEnabled;
         data.pearlUpEnabled = pearlUpEnabled;
+        data.pearlUpPitchSpeed = pearlUpPitchSpeed;
+        data.pearlUpWindChargeDelayTicks = pearlUpWindChargeDelayTicks;
         return data;
     }
 
     private static void normalize() {
         itemScale = Math.max(0.0, Math.min(1.0, itemScale));
+        pearlUpPitchSpeed = Math.max(1.0, Math.min(90.0, pearlUpPitchSpeed));
+        pearlUpWindChargeDelayTicks = Math.max(1, Math.min(10, pearlUpWindChargeDelayTicks));
 
         int enabledModes = 0;
         if (swapBreachMace) {
@@ -222,5 +234,7 @@ public class Config {
         private Boolean strongholdTrackerEnabled;
         private Boolean spearLungeEnabled;
         private Boolean pearlUpEnabled;
+        private Double pearlUpPitchSpeed;
+        private Integer pearlUpWindChargeDelayTicks;
     }
 }
