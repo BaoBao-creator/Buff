@@ -32,6 +32,7 @@ public class Config {
     public static boolean ignoreCooldown = false;
     public static boolean strongholdTrackerEnabled = false;
     public static boolean spearLungeEnabled = false;
+    public static boolean pearlUpEnabled = false;
 
     public static int getAttributeSwapMode() {
         if (swapBreachMace) {
@@ -83,6 +84,10 @@ public class Config {
 
     public static String getSpearLungeStatusName() {
         return spearLungeEnabled ? "ON" : "OFF";
+    }
+
+    public static String getPearlUpStatusName() {
+        return pearlUpEnabled ? "ON" : "OFF";
     }
 
     public static void load() {
@@ -151,6 +156,9 @@ public class Config {
         if (data.spearLungeEnabled != null) {
             spearLungeEnabled = data.spearLungeEnabled;
         }
+        if (data.pearlUpEnabled != null) {
+            pearlUpEnabled = data.pearlUpEnabled;
+        }
         normalize();
     }
 
@@ -166,6 +174,7 @@ public class Config {
         data.ignoreCooldown = ignoreCooldown;
         data.strongholdTrackerEnabled = strongholdTrackerEnabled;
         data.spearLungeEnabled = spearLungeEnabled;
+        data.pearlUpEnabled = pearlUpEnabled;
         return data;
     }
 
@@ -212,5 +221,6 @@ public class Config {
         private Boolean ignoreCooldown;
         private Boolean strongholdTrackerEnabled;
         private Boolean spearLungeEnabled;
+        private Boolean pearlUpEnabled;
     }
 }
