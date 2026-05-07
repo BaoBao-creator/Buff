@@ -22,7 +22,6 @@ public class BuffClient implements ClientModInitializer {
     private static KeyMapping switchTriggerModeKey;
     private static KeyMapping switchAttributeSwapModeKey;
     private static KeyMapping useSpearLungeKey;
-    private static KeyMapping usePearlUpKey;
 
     @Override
     public void onInitializeClient() {
@@ -67,16 +66,9 @@ public class BuffClient implements ClientModInitializer {
             MAIN_CATEGORY
         ));
 
-        usePearlUpKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "key.buff.pearl_up.activate",
-            InputConstants.Type.KEYSYM,
-            InputConstants.UNKNOWN.getValue(),
-            MAIN_CATEGORY
-        ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             StrongholdTracker.onClientTick(client);
-            PearlUpManager.onClientTick(client);
 
             while (openMenuKey.consumeClick()) {
                 openMainMenu(client);
@@ -107,21 +99,6 @@ public class BuffClient implements ClientModInitializer {
 
                 if (!SpearLungeManager.tryActivate(client)) {
                     showHotkeyMessage(client, "Spear Lunge: No spear with lunge found in hotbar");
-                }
-            }
-
-            while (usePearlUpKey.consumeClick()) {
-                if (!Config.pearlUpEnabled) {
-                    continue;
-                }
-
-                PearlUpManager.ActivationResult result = PearlUpManager.tryActivate(client);
-                switch (result) {
-                    case MISSING_PEARL -> showHotkeyMessage(client, "Pearl Up: No ender pearl found in hotbar");
-                    case MISSING_WIND_CHARGE -> showHotkeyMessage(client, "Pearl Up: No wind charge found in hotbar");
-                    case MISSING_BOTH -> showHotkeyMessage(client, "Pearl Up: No ender pearl or wind charge found in hotbar");
-                    default -> {
-                    }
                 }
             }
         });
