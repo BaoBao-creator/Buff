@@ -1,6 +1,9 @@
 package bao.buff.client.mixin;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -14,6 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixin {
+    private static final ConcurrentMap<Class<?>, Field[]> BUFF_ANIMATION_STATE_FIELDS = new ConcurrentHashMap<>();
+
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void buff$freezeMobAnimations(LivingEntity entity, LivingEntityRenderState state, float tickProgress, CallbackInfo ci) {
         if (!(entity instanceof Mob)) {
@@ -36,11 +41,7 @@ public abstract class LivingEntityRendererMixin {
     }
 
     private static void buff$stopAnimationStates(LivingEntityRenderState state) {
-        for (Field field : state.getClass().getFields()) {
-            if (field.getType() != AnimationState.class) {
-                continue;
-            }
-
+        for (Field field : BUFF_ANIMATION_STATE_FIELDS.computeIfAbsent(state.getClass(), LivingEntityRendererMixin::buff$animationStateFields)) {
             try {
                 AnimationState animationState = (AnimationState) field.get(state);
                 if (animationState != null) {
@@ -50,5 +51,11 @@ public abstract class LivingEntityRendererMixin {
                 // Public render-state fields should be accessible; ignore any modded edge cases.
             }
         }
+    }
+
+    private static Field[] buff$animationStateFields(Class<?> stateClass) {
+        return Arrays.stream(stateClass.getFields())
+                .filter(field -> field.getType() == AnimationState.class)
+                .toArray(Field[]::new);
     }
 }
