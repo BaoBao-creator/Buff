@@ -3,7 +3,7 @@
 	"id": "buff",
 	"version": "${version}",
 	"name": "Buff",
-	"description": "Always-on client optimizer: disables particles, freezes mob animations and texture animations, and forces fullbright.",
+	"description": "Always-on client optimizer: disables particles, sky, clouds, weather, mob animations, and texture animations, and forces fullbright.",
 	"authors": [
 		"Me!"
 	],

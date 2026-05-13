@@ -8,6 +8,7 @@
 		"BlockEntityRenderDispatcherMixin",
 		"TextureAtlasMixin",
 		"LightTextureMixin",
+		"LevelRendererMixin",
 		"GameRendererMixin",
 		"LivingEntityRendererMixin"
 	],
