@@ -6,6 +6,6 @@ import net.fabricmc.api.ClientModInitializer;
 public class BuffClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
-		Buff.LOGGER.info("Buff is active: particles, sky, clouds, weather, mob animations, texture animations, block animations, and dropped-item spin disabled; dropped items use flat 2D rendering; fullbright forced.");
+		Buff.LOGGER.info("Buff is active: particles, sky, clouds, weather, mob animations, texture animations, block animations, and dropped-item spin disabled; dropped items use smaller flat 2D rendering; first-person held items are reduced; fullbright forced.");
 	}
 }

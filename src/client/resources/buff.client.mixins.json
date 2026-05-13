@@ -12,7 +12,8 @@
 		"GameRendererMixin",
 		"LivingEntityRendererMixin",
 		"ItemClusterRenderStateMixin",
-		"ItemEntityRendererMixin"
+		"ItemEntityRendererMixin",
+		"ItemInHandRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
