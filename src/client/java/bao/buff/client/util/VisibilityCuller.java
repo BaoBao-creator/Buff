@@ -205,7 +205,13 @@ public final class VisibilityCuller {
             return true;
         }
 
-        return (x * forward.x() + y * forward.y() + z * forward.z()) / Math.sqrt(lengthSq) > -0.05D;
+        double dot = x * forward.x() + y * forward.y() + z * forward.z();
+        if (dot >= 0.0D) {
+            return true;
+        }
+
+        // Equivalent to (dot / sqrt(lengthSq)) > -0.05D but avoids sqrt/division in the hot path.
+        return dot * dot < 0.0025D * lengthSq;
     }
 
     private static boolean hasVisibleSample(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity) {
