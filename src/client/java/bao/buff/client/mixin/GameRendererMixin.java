@@ -3,7 +3,6 @@ package bao.buff.client.mixin;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,10 +26,6 @@ public abstract class GameRendererMixin {
         ci.cancel();
     }
 
-    @Inject(method = "renderConfusionOverlay", at = @At("HEAD"), cancellable = true)
-    private void buff$disableConfusionOverlay(GuiGraphics guiGraphics, float intensity, CallbackInfo ci) {
-        ci.cancel();
-    }
 
     @Inject(method = "getFov", at = @At("RETURN"), cancellable = true)
     private void buff$lockFov(Camera camera, float tickProgress, boolean changingFov, CallbackInfoReturnable<Float> cir) {
