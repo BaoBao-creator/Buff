@@ -23,4 +23,9 @@ public abstract class ScreenEffectRendererMixin {
     private static void buff$restoreLowFireTransform(Minecraft minecraft, PoseStack poseStack, CallbackInfo ci) {
         poseStack.popPose();
     }
+
+    @Inject(method = "renderScreenEffect", at = @At("HEAD"), cancellable = true)
+    private static void buff$disableBlockingScreenEffects(Minecraft minecraft, PoseStack poseStack, CallbackInfo ci) {
+        ci.cancel();
+    }
 }
