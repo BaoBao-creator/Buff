@@ -10,7 +10,9 @@
 		"LightTextureMixin",
 		"LevelRendererMixin",
 		"GameRendererMixin",
-		"LivingEntityRendererMixin"
+		"LivingEntityRendererMixin",
+		"ItemClusterRenderStateMixin",
+		"ItemEntityRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
