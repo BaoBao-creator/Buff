@@ -12,6 +12,7 @@
 		"LightTextureMixin",
 		"LevelRendererMixin",
 		"GameRendererMixin",
+		"InGameHudMixin",
 		"ScreenEffectRendererMixin",
 		"LivingEntityRendererMixin",
 		"ItemClusterRenderStateMixin",
