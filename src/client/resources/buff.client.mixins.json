@@ -6,9 +6,11 @@
 	"client": [
 		"ParticleEngineMixin",
 		"BlockEntityRenderDispatcherMixin",
+		"EntityRenderDispatcherMixin",
 		"TextureAtlasMixin",
 		"LightTextureMixin",
 		"LevelRendererMixin",
+		"ModelBlockRendererMixin",
 		"GameRendererMixin",
 		"LivingEntityRendererMixin",
 		"ItemClusterRenderStateMixin",
