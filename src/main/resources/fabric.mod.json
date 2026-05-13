@@ -3,7 +3,7 @@
 	"id": "buff",
 	"version": "${version}",
 	"name": "Buff",
-	"description": "I'll clear all off lagging",
+	"description": "Always-on client optimizer: disables particles, freezes texture animations, and forces fullbright.",
 	"authors": [
 		"Me!"
 	],
@@ -13,7 +13,7 @@
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/buff/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"main": [
 			"bao.buff.Buff"
@@ -32,7 +32,6 @@
 	"depends": {
 		"fabricloader": ">=0.18.1",
 		"minecraft": "~1.21.11",
-		"java": ">=21",
-		"fabric-api": "*"
+		"java": ">=21"
 	}
 }
