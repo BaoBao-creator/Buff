@@ -15,8 +15,7 @@
 		"ScreenEffectRendererMixin",
 		"LivingEntityRendererMixin",
 		"ItemClusterRenderStateMixin",
-		"ItemEntityRendererMixin",
-		"ItemInHandRendererMixin"
+		"ItemEntityRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
