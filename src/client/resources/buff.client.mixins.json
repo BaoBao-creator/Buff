@@ -4,6 +4,10 @@
 	"refmap": "buff.client.refmap.json",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"ParticleEngineMixin",
+		"TextureAtlasMixin",
+		"LightTextureMixin",
+		"GameRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
