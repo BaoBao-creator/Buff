@@ -5,6 +5,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"ParticleEngineMixin",
+		"BlockEntityRendererMixin",
 		"TextureAtlasMixin",
 		"LightTextureMixin",
 		"GameRendererMixin",
