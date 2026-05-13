@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(BlockEntityRenderer.class)
-public abstract class BlockEntityRendererMixin {
+public interface BlockEntityRendererMixin {
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void buff$freezeBlockAnimations(Object blockEntity, Object state, float tickProgress, Object cameraPos,
             Object crumblingOverlay, CallbackInfo ci) {
