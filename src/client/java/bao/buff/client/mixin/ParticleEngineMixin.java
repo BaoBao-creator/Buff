@@ -1,5 +1,6 @@
 package bao.buff.client.mixin;
 
+import bao.buff.client.util.VisibilityCuller;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
@@ -50,5 +51,6 @@ public abstract class ParticleEngineMixin {
     @Inject(method = "setLevel", at = @At("TAIL"))
     private void buff$clearParticlesOnWorldChange(ClientLevel level, CallbackInfo ci) {
         ((ParticleEngine) (Object) this).clearParticles();
+        VisibilityCuller.clearCaches();
     }
 }
