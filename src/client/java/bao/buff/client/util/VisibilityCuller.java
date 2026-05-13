@@ -23,7 +23,10 @@ public final class VisibilityCuller {
     private static final double HIT_EPSILON_SQ = 0.09D;
     private static final int FULL_SAMPLE_COUNT = 7;
     private static final int FAST_SAMPLE_COUNT = 3;
-    private static final int MAX_RAYCASTS_PER_FRAME = 512;
+    private static final int BASE_MAX_RAYCASTS_PER_FRAME = 512;
+    private static final int MIN_RAYCASTS_PER_FRAME = 160;
+    private static final int LOW_FPS_THRESHOLD = 35;
+    private static final int MID_FPS_THRESHOLD = 50;
     private static final int ENTITY_VISIBLE_CACHE_FRAMES = 3;
     private static final int ENTITY_HIDDEN_CACHE_FRAMES = 1;
     private static final int ITEM_VISIBLE_CACHE_FRAMES = 6;
@@ -37,6 +40,12 @@ public final class VisibilityCuller {
     private static Frustum activeFrustum;
     private static int frameIndex;
     private static int raycastsThisFrame;
+    private static int maxRaycastsThisFrame = BASE_MAX_RAYCASTS_PER_FRAME;
+
+    private static long cacheHits;
+    private static long cacheMisses;
+    private static long cachePrunes;
+    private static long cacheClears;
 
     private VisibilityCuller() {
     }
@@ -45,6 +54,7 @@ public final class VisibilityCuller {
         activeFrustum = frustum;
         frameIndex++;
         raycastsThisFrame = 0;
+        maxRaycastsThisFrame = computeRaycastBudget();
         if ((frameIndex & 31) == 0) {
             pruneCache(entityCache);
             pruneCache(blockEntityCache);
@@ -54,6 +64,7 @@ public final class VisibilityCuller {
     public static void clearCaches() {
         entityCache.clear();
         blockEntityCache.clear();
+        cacheClears += 2;
         raycastsThisFrame = 0;
     }
 
@@ -77,8 +88,10 @@ public final class VisibilityCuller {
         long cameraCell = BlockPos.containing(cameraPos).asLong();
         CacheEntry cached = entityCache.get(entity.getId());
         if (cached != null && cached.matches(frameIndex, objectCell, cameraCell)) {
+            cacheHits++;
             return cached.visible;
         }
+        cacheMisses++;
 
         double nearSkipDistanceSq = item ? ITEM_NEAR_SKIP_DISTANCE_SQ : NEAR_SKIP_DISTANCE_SQ;
         int sampleCount = item ? FAST_SAMPLE_COUNT : FULL_SAMPLE_COUNT;
@@ -105,8 +118,10 @@ public final class VisibilityCuller {
         long cameraCell = BlockPos.containing(cameraPos).asLong();
         CacheEntry cached = blockEntityCache.get(objectCell);
         if (cached != null && cached.matches(frameIndex, objectCell, cameraCell)) {
+            cacheHits++;
             return cached.visible;
         }
+        cacheMisses++;
 
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = minecraft.gameRenderer.getMainCamera();
@@ -131,7 +146,7 @@ public final class VisibilityCuller {
             return false;
         }
 
-        if (raycastsThisFrame >= MAX_RAYCASTS_PER_FRAME) {
+        if (raycastsThisFrame >= maxRaycastsThisFrame) {
             return true;
         }
 
@@ -194,15 +209,16 @@ public final class VisibilityCuller {
     }
 
     private static boolean hasVisibleSample(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity) {
-        if (raycastsThisFrame >= MAX_RAYCASTS_PER_FRAME) {
+        if (raycastsThisFrame >= maxRaycastsThisFrame) {
             return true;
         }
 
         raycastsThisFrame++;
-        return hasLineOfSight(level, from, new Vec3(sampleX, sampleY, sampleZ), targetBlock, cameraEntity);
+        return hasLineOfSight(level, from, sampleX, sampleY, sampleZ, targetBlock, cameraEntity);
     }
 
-    private static boolean hasLineOfSight(Level level, Vec3 from, Vec3 to, BlockPos targetBlock, Entity cameraEntity) {
+    private static boolean hasLineOfSight(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity) {
+        Vec3 to = new Vec3(sampleX, sampleY, sampleZ);
         BlockHitResult hit = level.clip(new ClipContext(from, to, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, cameraEntity));
         if (hit.getType() == HitResult.Type.MISS) {
             return true;
@@ -212,38 +228,66 @@ public final class VisibilityCuller {
             return true;
         }
 
-        return hit.getLocation().distanceToSqr(from) + HIT_EPSILON_SQ >= to.distanceToSqr(from);
+        return hit.getLocation().distanceToSqr(from) + HIT_EPSILON_SQ >= distanceToSqr(from, sampleX, sampleY, sampleZ);
     }
 
     private static void remember(Map<Integer, CacheEntry> cache, int key, boolean visible, int ttl) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
     private static void remember(Map<Integer, CacheEntry> cache, int key, boolean visible, int ttl, long objectCell, long cameraCell) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
     }
 
     private static void remember(Map<Long, CacheEntry> cache, long key, boolean visible, int ttl) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
     private static void remember(Map<Long, CacheEntry> cache, long key, boolean visible, int ttl, long objectCell, long cameraCell) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
     }
 
+    private static void enforceCacheBudget(Map<?, CacheEntry> cache) {
+        if (cache.size() < MAX_CACHE_ENTRIES) {
+            return;
+        }
+
+        pruneCache(cache);
+        if (cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.clear();
+            cacheClears++;
+        }
+    }
+
+    private static int computeRaycastBudget() {
+        Minecraft minecraft = Minecraft.getInstance();
+        int fps = minecraft.getFps();
+        if (fps <= 0) {
+            return BASE_MAX_RAYCASTS_PER_FRAME;
+        }
+
+        if (fps < LOW_FPS_THRESHOLD) {
+            return MIN_RAYCASTS_PER_FRAME;
+        }
+
+        if (fps < MID_FPS_THRESHOLD) {
+            return (BASE_MAX_RAYCASTS_PER_FRAME + MIN_RAYCASTS_PER_FRAME) / 2;
+        }
+
+        return BASE_MAX_RAYCASTS_PER_FRAME;
+    }
+
+    public static String debugTelemetry() {
+        return "VisibilityCuller{hits=" + cacheHits + ", misses=" + cacheMisses + ", prunes=" + cachePrunes + ", clears=" + cacheClears
+                + ", raycasts=" + raycastsThisFrame + "/" + maxRaycastsThisFrame + "}";
+    }
+
     private static void pruneCache(Map<?, CacheEntry> cache) {
+        cachePrunes++;
         Iterator<? extends Map.Entry<?, CacheEntry>> iterator = cache.entrySet().iterator();
         while (iterator.hasNext()) {
             if (iterator.next().getValue().expiresAtFrame < frameIndex) {
