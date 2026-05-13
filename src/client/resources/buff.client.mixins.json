@@ -10,7 +10,6 @@
 		"TextureAtlasMixin",
 		"LightTextureMixin",
 		"LevelRendererMixin",
-		"ModelBlockRendererMixin",
 		"GameRendererMixin",
 		"LivingEntityRendererMixin",
 		"ItemClusterRenderStateMixin",
