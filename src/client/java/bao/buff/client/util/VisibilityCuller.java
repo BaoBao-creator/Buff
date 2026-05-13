@@ -216,6 +216,9 @@ public final class VisibilityCuller {
     }
 
     private static void remember(Map<Integer, CacheEntry> cache, int key, boolean visible, int ttl) {
+        if (cache.size() >= MAX_CACHE_ENTRIES) {
+            pruneCache(cache);
+        }
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
@@ -227,6 +230,9 @@ public final class VisibilityCuller {
     }
 
     private static void remember(Map<Long, CacheEntry> cache, long key, boolean visible, int ttl) {
+        if (cache.size() >= MAX_CACHE_ENTRIES) {
+            pruneCache(cache);
+        }
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
