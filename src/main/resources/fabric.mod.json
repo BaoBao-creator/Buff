@@ -23,7 +23,6 @@
 		]
 	},
 	"mixins": [
-		"buff.mixins.json",
 		{
 			"config": "buff.client.mixins.json",
 			"environment": "client"
