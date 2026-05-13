@@ -216,25 +216,34 @@ public final class VisibilityCuller {
     }
 
     private static void remember(Map<Integer, CacheEntry> cache, int key, boolean visible, int ttl) {
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
     private static void remember(Map<Integer, CacheEntry> cache, int key, boolean visible, int ttl, long objectCell, long cameraCell) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
     }
 
     private static void remember(Map<Long, CacheEntry> cache, long key, boolean visible, int ttl) {
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, Long.MIN_VALUE, Long.MIN_VALUE));
     }
 
     private static void remember(Map<Long, CacheEntry> cache, long key, boolean visible, int ttl, long objectCell, long cameraCell) {
-        if (cache.size() >= MAX_CACHE_ENTRIES) {
-            pruneCache(cache);
-        }
+        enforceCacheBudget(cache);
         cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
+    }
+
+    private static void enforceCacheBudget(Map<?, CacheEntry> cache) {
+        if (cache.size() < MAX_CACHE_ENTRIES) {
+            return;
+        }
+
+        pruneCache(cache);
+        if (cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.clear();
+        }
     }
 
     private static void pruneCache(Map<?, CacheEntry> cache) {
