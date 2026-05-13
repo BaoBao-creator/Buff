@@ -6,6 +6,6 @@ import net.fabricmc.api.ClientModInitializer;
 public class BuffClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
-		Buff.LOGGER.info("Buff is active: particles disabled, mob animations frozen, texture and block animations frozen, fullbright forced.");
+		Buff.LOGGER.info("Buff is active: particles, sky, clouds, weather, mob animations, texture animations, and block animations disabled; fullbright forced.");
 	}
 }
