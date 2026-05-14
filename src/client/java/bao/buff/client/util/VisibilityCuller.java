@@ -27,7 +27,6 @@ public final class VisibilityCuller {
     private static final int MIN_RAYCASTS_PER_FRAME = 160;
     private static final int LOW_FPS_THRESHOLD = 35;
     private static final int MID_FPS_THRESHOLD = 50;
-    private static final double DISTANT_ENTITY_SAMPLE_DISTANCE_SQ = 40.0D * 40.0D;
     private static final int ENTITY_VISIBLE_CACHE_FRAMES = 3;
     private static final int ENTITY_HIDDEN_CACHE_FRAMES = 1;
     private static final int ITEM_VISIBLE_CACHE_FRAMES = 6;
@@ -42,7 +41,6 @@ public final class VisibilityCuller {
     private static int frameIndex;
     private static int raycastsThisFrame;
     private static int maxRaycastsThisFrame = BASE_MAX_RAYCASTS_PER_FRAME;
-    private static boolean lowBudgetFrame;
 
     private static long cacheHits;
     private static long cacheMisses;
@@ -57,7 +55,6 @@ public final class VisibilityCuller {
         frameIndex++;
         raycastsThisFrame = 0;
         maxRaycastsThisFrame = computeRaycastBudget();
-        lowBudgetFrame = maxRaycastsThisFrame <= ((BASE_MAX_RAYCASTS_PER_FRAME + MIN_RAYCASTS_PER_FRAME) / 2);
         if ((frameIndex & 31) == 0) {
             pruneCache(entityCache);
             pruneCache(blockEntityCache);
@@ -98,9 +95,6 @@ public final class VisibilityCuller {
 
         double nearSkipDistanceSq = item ? ITEM_NEAR_SKIP_DISTANCE_SQ : NEAR_SKIP_DISTANCE_SQ;
         int sampleCount = item ? FAST_SAMPLE_COUNT : FULL_SAMPLE_COUNT;
-        if (lowBudgetFrame || (!item && distanceToSqr(cameraPos, box) >= DISTANT_ENTITY_SAMPLE_DISTANCE_SQ)) {
-            sampleCount = FAST_SAMPLE_COUNT;
-        }
         boolean visible = isBoxVisible(entity.level(), cameraPos, camera.forwardVector(), box, null, cameraEntity, nearSkipDistanceSq, sampleCount);
         int ttl = item ? (visible ? ITEM_VISIBLE_CACHE_FRAMES : ITEM_HIDDEN_CACHE_FRAMES)
                 : (visible ? ENTITY_VISIBLE_CACHE_FRAMES : ENTITY_HIDDEN_CACHE_FRAMES);
@@ -314,10 +308,6 @@ public final class VisibilityCuller {
 
     private static double distanceToSqr(Vec3 pos, double x, double y, double z) {
         return lengthSquared(pos.x - x, pos.y - y, pos.z - z);
-    }
-
-    private static double distanceToSqr(Vec3 pos, AABB box) {
-        return distanceToSqr(pos, mid(box.minX, box.maxX), mid(box.minY, box.maxY), mid(box.minZ, box.maxZ));
     }
 
     private static double lengthSquared(double x, double y, double z) {
