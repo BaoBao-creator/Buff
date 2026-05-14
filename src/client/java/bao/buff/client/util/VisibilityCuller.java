@@ -1,10 +1,9 @@
 package bao.buff.client.util;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -43,11 +42,15 @@ public final class VisibilityCuller {
     private static final int LOS_HIDDEN_BUCKET_TTL = 2;
     private static final double CAMERA_REUSE_SHIFT_SQ = 0.04D;
 
-    private static final Int2ObjectMap<CacheEntry> entityCache = new Int2ObjectOpenHashMap<>();
-    private static final Long2ObjectMap<CacheEntry> blockEntityCache = new Long2ObjectOpenHashMap<>();
+    private static final Int2ObjectLinkedOpenHashMap<CacheEntry> entityCache = new Int2ObjectLinkedOpenHashMap<>();
+    private static final Long2ObjectLinkedOpenHashMap<CacheEntry> blockEntityCache = new Long2ObjectLinkedOpenHashMap<>();
     private static final Long2ObjectLinkedOpenHashMap<LosBucketEntry> losBucketCache = new Long2ObjectLinkedOpenHashMap<>(1024);
 
     private static Frustum activeFrustum;
+    private static Vec3 cachedCameraPos;
+    private static Vector3fc cachedCameraForward;
+    private static Entity cachedCameraEntity;
+    private static long cachedCameraCell = Long.MIN_VALUE;
     private static int frameIndex;
     private static int raycastsThisFrame;
     private static int maxRaycastsThisFrame = BASE_MAX_RAYCASTS_PER_FRAME;
@@ -70,6 +73,13 @@ public final class VisibilityCuller {
         frameIndex++;
         raycastsThisFrame = 0;
         maxRaycastsThisFrame = computeRaycastBudget();
+        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        if (camera != null) {
+            cachedCameraPos = camera.position();
+            cachedCameraForward = camera.forwardVector();
+            cachedCameraEntity = camera.entity();
+            cachedCameraCell = cachedCameraPos != null ? BlockPos.containing(cachedCameraPos).asLong() : Long.MIN_VALUE;
+        }
         if ((frameIndex & 31) == 0) {
             pruneCache(entityCache);
             pruneCache(blockEntityCache);
@@ -84,16 +94,18 @@ public final class VisibilityCuller {
     }
 
     public static boolean shouldRenderEntity(Entity entity, Frustum frustum) {
-        Minecraft minecraft = Minecraft.getInstance();
-        Camera camera = minecraft.gameRenderer.getMainCamera();
-        Entity cameraEntity = camera.entity();
+        Entity cameraEntity = cachedCameraEntity;
+        Vec3 cameraPos = cachedCameraPos;
+        Vector3fc cameraForward = cachedCameraForward;
+        if (cameraEntity == null || cameraPos == null || cameraForward == null) {
+            return true;
+        }
 
         if (entity == cameraEntity || entity.isPassengerOfSameVehicle(cameraEntity)) {
             return true;
         }
 
         boolean item = entity instanceof ItemEntity;
-        Vec3 cameraPos = camera.position();
 
         AABB box = entity.getBoundingBox();
         double offset = item ? 0.05D : 0.15D;
@@ -113,7 +125,7 @@ public final class VisibilityCuller {
         double midY = mid(minY, maxY);
         double midZ = mid(minZ, maxZ);
         long objectCell = cellKey(midX, midY, midZ);
-        long cameraCell = BlockPos.containing(cameraPos).asLong();
+        long cameraCell = cachedCameraCell;
         
         CacheEntry cached = entityCache.get(entity.getId());
         if (cached != null && cached.matches(frameIndex, objectCell, cameraCell)) {
@@ -123,8 +135,8 @@ public final class VisibilityCuller {
         cacheMisses++;
 
         double nearSkipDistanceSq = item ? ITEM_NEAR_SKIP_DISTANCE_SQ : NEAR_SKIP_DISTANCE_SQ;
-        int sampleCount = resolveSampleCount(maxX - minX, maxY - minY, maxZ - minZ, distanceToSqr(cameraPos, midX, midY, midZ), item);
-        boolean visible = isBoxVisible(entity.level(), cameraPos, camera.forwardVector(), minX, minY, minZ, maxX, maxY, maxZ, null, cameraEntity,
+        int sampleCount = resolveSampleCount(box.getXsize(), box.getYsize(), box.getZsize(), distanceToSqr(cameraPos, midX, midY, midZ), item);
+        boolean visible = isBoxVisible(entity.level(), cameraPos, cameraForward, minX, minY, minZ, maxX, maxY, maxZ, null, cameraEntity,
                 nearSkipDistanceSq, sampleCount, objectCell, cameraCell);
         
         int ttl = item ? (visible ? ITEM_VISIBLE_CACHE_FRAMES : ITEM_HIDDEN_CACHE_FRAMES)
@@ -153,7 +165,7 @@ public final class VisibilityCuller {
         }
 
         long objectCell = pos.asLong();
-        long cameraCell = BlockPos.containing(cameraPos).asLong();
+        long cameraCell = cachedCameraCell;
         CacheEntry cached = blockEntityCache.get(objectCell);
         if (cached != null && cached.matches(frameIndex, objectCell, cameraCell)) {
             cacheHits++;
@@ -161,15 +173,17 @@ public final class VisibilityCuller {
         }
         cacheMisses++;
 
-        Minecraft minecraft = Minecraft.getInstance();
-        Camera camera = minecraft.gameRenderer.getMainCamera();
-        Entity cameraEntity = camera.entity();
+        Entity cameraEntity = cachedCameraEntity;
+        Vector3fc cameraForward = cachedCameraForward;
+        if (cameraEntity == null || cameraForward == null || cachedCameraPos == null) {
+            return true;
+        }
         double midX = mid(minX, maxX);
         double midY = mid(minY, maxY);
         double midZ = mid(minZ, maxZ);
         
-        int sampleCount = resolveSampleCount(maxX - minX, maxY - minY, maxZ - minZ, distanceToSqr(cameraPos, midX, midY, midZ), false);
-        boolean visible = isBoxVisible(level, cameraPos, camera.forwardVector(), minX, minY, minZ, maxX, maxY, maxZ, pos, cameraEntity,
+        int sampleCount = resolveSampleCount(1.0D, 1.0D, 1.0D, distanceToSqr(cameraPos, midX, midY, midZ), false);
+        boolean visible = isBoxVisible(level, cameraPos, cameraForward, minX, minY, minZ, maxX, maxY, maxZ, pos, cameraEntity,
                 NEAR_SKIP_DISTANCE_SQ, sampleCount, objectCell, cameraCell);
         
         int ttl = visible ? BLOCK_ENTITY_VISIBLE_CACHE_FRAMES : BLOCK_ENTITY_HIDDEN_CACHE_FRAMES;
@@ -257,10 +271,18 @@ public final class VisibilityCuller {
         long bucket = bucketKey(objectCell, cameraCell);
         LosBucketEntry cached = losBucketCache.getAndMoveToFirst(bucket);
         
-        if (cached != null && cached.expiresAtFrame >= frameIndex
-                && distanceToSqr(from, cached.cameraX, cached.cameraY, cached.cameraZ) <= CAMERA_REUSE_SHIFT_SQ) {
-            losBucketHits++;
-            return cached.visible;
+        if (cached != null && cached.expiresAtFrame >= frameIndex) {
+            double dx = from.x - cached.cameraX;
+            if (dx * dx <= CAMERA_REUSE_SHIFT_SQ) {
+                double dy = from.y - cached.cameraY;
+                if (dy * dy <= CAMERA_REUSE_SHIFT_SQ) {
+                    double dz = from.z - cached.cameraZ;
+                    if (dz * dz <= CAMERA_REUSE_SHIFT_SQ && dx * dx + dy * dy + dz * dz <= CAMERA_REUSE_SHIFT_SQ) {
+                        losBucketHits++;
+                        return cached.visible;
+                    }
+                }
+            }
         }
 
         losBucketMisses++;
@@ -295,37 +317,39 @@ public final class VisibilityCuller {
         return hit.getLocation().distanceToSqr(from) + HIT_EPSILON_SQ >= distanceToSqr(from, sampleX, sampleY, sampleZ);
     }
 
-    private static void remember(Int2ObjectMap<CacheEntry> cache, int key, boolean visible, int ttl, long objectCell, long cameraCell) {
+    private static void remember(Int2ObjectLinkedOpenHashMap<CacheEntry> cache, int key, boolean visible, int ttl, long objectCell, long cameraCell) {
         CacheEntry entry = cache.get(key);
         if (entry != null) {
             entry.update(visible, frameIndex + ttl, objectCell, cameraCell);
+            cache.putAndMoveToFirst(key, entry);
         } else {
             enforceCacheBudget(cache);
-            cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
+            cache.putAndMoveToFirst(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
         }
     }
 
-    private static void remember(Long2ObjectMap<CacheEntry> cache, long key, boolean visible, int ttl, long objectCell, long cameraCell) {
+    private static void remember(Long2ObjectLinkedOpenHashMap<CacheEntry> cache, long key, boolean visible, int ttl, long objectCell, long cameraCell) {
         CacheEntry entry = cache.get(key);
         if (entry != null) {
             entry.update(visible, frameIndex + ttl, objectCell, cameraCell);
+            cache.putAndMoveToFirst(key, entry);
         } else {
             enforceCacheBudget(cache);
-            cache.put(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
+            cache.putAndMoveToFirst(key, new CacheEntry(visible, frameIndex + ttl, objectCell, cameraCell));
         }
     }
 
-    private static void enforceCacheBudget(Object cacheMap) {
-        if (cacheMap instanceof Int2ObjectMap<?> map) {
-            if (map.size() >= MAX_CACHE_ENTRIES) {
-                map.clear();
-                cacheClears++;
-            }
-        } else if (cacheMap instanceof Long2ObjectMap<?> map) {
-            if (map.size() >= MAX_CACHE_ENTRIES) {
-                map.clear();
-                cacheClears++;
-            }
+    private static void enforceCacheBudget(Int2ObjectLinkedOpenHashMap<CacheEntry> cache) {
+        while (cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.removeLast();
+            cacheClears++;
+        }
+    }
+
+    private static void enforceCacheBudget(Long2ObjectLinkedOpenHashMap<CacheEntry> cache) {
+        while (cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.removeLast();
+            cacheClears++;
         }
     }
 
