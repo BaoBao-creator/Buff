@@ -2,6 +2,7 @@ package bao.buff.client.util;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -25,8 +26,10 @@ public final class VisibilityCuller {
     private static final int FAST_SAMPLE_COUNT = 3;
     private static final int BASE_MAX_RAYCASTS_PER_FRAME = 512;
     private static final int MIN_RAYCASTS_PER_FRAME = 160;
-    private static final int LOW_FPS_THRESHOLD = 35;
-    private static final int MID_FPS_THRESHOLD = 50;
+    private static final int BUDGET_SMOOTHING_NUM = 7;
+    private static final int BUDGET_SMOOTHING_DEN = 8;
+    private static final double LOW_FRAME_TIME_MS = 33.0D;
+    private static final double MID_FRAME_TIME_MS = 22.0D;
     private static final int ENTITY_VISIBLE_CACHE_FRAMES = 3;
     private static final int ENTITY_HIDDEN_CACHE_FRAMES = 1;
     private static final int ITEM_VISIBLE_CACHE_FRAMES = 6;
@@ -34,9 +37,14 @@ public final class VisibilityCuller {
     private static final int BLOCK_ENTITY_VISIBLE_CACHE_FRAMES = 4;
     private static final int BLOCK_ENTITY_HIDDEN_CACHE_FRAMES = 2;
     private static final int MAX_CACHE_ENTRIES = 4096;
+    private static final int MAX_SPATIAL_BUCKETS = 512;
+    private static final int LOS_VISIBLE_BUCKET_TTL = 5;
+    private static final int LOS_HIDDEN_BUCKET_TTL = 2;
+    private static final double CAMERA_REUSE_SHIFT_SQ = 0.04D;
 
     private static final Map<Integer, CacheEntry> entityCache = new HashMap<>();
     private static final Map<Long, CacheEntry> blockEntityCache = new HashMap<>();
+    private static final LinkedHashMap<Long, LosBucketEntry> losBucketCache = new LinkedHashMap<>(1024, 0.75F, true);
     private static Frustum activeFrustum;
     private static int frameIndex;
     private static int raycastsThisFrame;
@@ -46,6 +54,11 @@ public final class VisibilityCuller {
     private static long cacheMisses;
     private static long cachePrunes;
     private static long cacheClears;
+    private static long losBucketHits;
+    private static long losBucketMisses;
+    private static long losBucketEvictions;
+    private static long sampleRequests;
+    private static double smoothedFrameTimeMs = MID_FRAME_TIME_MS;
 
     private VisibilityCuller() {
     }
@@ -94,8 +107,8 @@ public final class VisibilityCuller {
         cacheMisses++;
 
         double nearSkipDistanceSq = item ? ITEM_NEAR_SKIP_DISTANCE_SQ : NEAR_SKIP_DISTANCE_SQ;
-        int sampleCount = item ? FAST_SAMPLE_COUNT : FULL_SAMPLE_COUNT;
-        boolean visible = isBoxVisible(entity.level(), cameraPos, camera.forwardVector(), box, null, cameraEntity, nearSkipDistanceSq, sampleCount);
+        int sampleCount = resolveSampleCount(box, distanceToSqr(cameraPos, mid(box.minX, box.maxX), mid(box.minY, box.maxY), mid(box.minZ, box.maxZ)), item);
+        boolean visible = isBoxVisible(entity.level(), cameraPos, camera.forwardVector(), box, null, cameraEntity, nearSkipDistanceSq, sampleCount, objectCell, cameraCell);
         int ttl = item ? (visible ? ITEM_VISIBLE_CACHE_FRAMES : ITEM_HIDDEN_CACHE_FRAMES)
                 : (visible ? ENTITY_VISIBLE_CACHE_FRAMES : ENTITY_HIDDEN_CACHE_FRAMES);
         remember(entityCache, entity.getId(), visible, ttl, objectCell, cameraCell);
@@ -126,14 +139,15 @@ public final class VisibilityCuller {
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = minecraft.gameRenderer.getMainCamera();
         Entity cameraEntity = camera.entity();
-        boolean visible = isBoxVisible(level, cameraPos, camera.forwardVector(), box, pos, cameraEntity, NEAR_SKIP_DISTANCE_SQ, FAST_SAMPLE_COUNT);
+        int sampleCount = resolveSampleCount(box, distanceToSqr(cameraPos, mid(box.minX, box.maxX), mid(box.minY, box.maxY), mid(box.minZ, box.maxZ)), false);
+        boolean visible = isBoxVisible(level, cameraPos, camera.forwardVector(), box, pos, cameraEntity, NEAR_SKIP_DISTANCE_SQ, sampleCount, objectCell, cameraCell);
         int ttl = visible ? BLOCK_ENTITY_VISIBLE_CACHE_FRAMES : BLOCK_ENTITY_HIDDEN_CACHE_FRAMES;
         remember(blockEntityCache, objectCell, visible, ttl, objectCell, cameraCell);
         return visible;
     }
 
     private static boolean isBoxVisible(Level level, Vec3 cameraPos, Vector3fc forward, AABB box, BlockPos targetBlock, Entity cameraEntity,
-            double nearSkipDistanceSq, int sampleCount) {
+                                        double nearSkipDistanceSq, int sampleCount, long objectCell, long cameraCell) {
         double midX = mid(box.minX, box.maxX);
         double midY = mid(box.minY, box.maxY);
         double midZ = mid(box.minZ, box.maxZ);
@@ -150,7 +164,7 @@ public final class VisibilityCuller {
             return true;
         }
 
-        if (hasVisibleSample(level, cameraPos, midX, midY, midZ, targetBlock, cameraEntity)) {
+        if (hasVisibleSample(level, cameraPos, midX, midY, midZ, targetBlock, cameraEntity, objectCell, cameraCell)) {
             return true;
         }
 
@@ -158,8 +172,8 @@ public final class VisibilityCuller {
             return false;
         }
 
-        if (hasVisibleSample(level, cameraPos, midX, box.maxY, midZ, targetBlock, cameraEntity)
-                || hasVisibleSample(level, cameraPos, midX, box.minY, midZ, targetBlock, cameraEntity)) {
+        if (hasVisibleSample(level, cameraPos, midX, box.maxY, midZ, targetBlock, cameraEntity, objectCell, cameraCell)
+                || hasVisibleSample(level, cameraPos, midX, box.minY, midZ, targetBlock, cameraEntity, objectCell, cameraCell)) {
             return true;
         }
 
@@ -167,10 +181,10 @@ public final class VisibilityCuller {
             return false;
         }
 
-        return hasVisibleSample(level, cameraPos, box.minX, midY, box.minZ, targetBlock, cameraEntity)
-                || hasVisibleSample(level, cameraPos, box.minX, midY, box.maxZ, targetBlock, cameraEntity)
-                || hasVisibleSample(level, cameraPos, box.maxX, midY, box.minZ, targetBlock, cameraEntity)
-                || hasVisibleSample(level, cameraPos, box.maxX, midY, box.maxZ, targetBlock, cameraEntity);
+        return hasVisibleSample(level, cameraPos, box.minX, midY, box.minZ, targetBlock, cameraEntity, objectCell, cameraCell)
+                || hasVisibleSample(level, cameraPos, box.minX, midY, box.maxZ, targetBlock, cameraEntity, objectCell, cameraCell)
+                || hasVisibleSample(level, cameraPos, box.maxX, midY, box.minZ, targetBlock, cameraEntity, objectCell, cameraCell)
+                || hasVisibleSample(level, cameraPos, box.maxX, midY, box.maxZ, targetBlock, cameraEntity, objectCell, cameraCell);
     }
 
     private static boolean isInFrontOfCamera(Vec3 cameraPos, Vector3fc forward, AABB box, double midX, double midY, double midZ, int sampleCount) {
@@ -210,17 +224,33 @@ public final class VisibilityCuller {
             return true;
         }
 
-        // Equivalent to (dot / sqrt(lengthSq)) > -0.05D but avoids sqrt/division in the hot path.
         return dot * dot < 0.0025D * lengthSq;
     }
 
-    private static boolean hasVisibleSample(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity) {
+    private static boolean hasVisibleSample(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity,
+                                            long objectCell, long cameraCell) {
         if (raycastsThisFrame >= maxRaycastsThisFrame) {
             return true;
         }
 
+        sampleRequests++;
+        long bucket = bucketKey(objectCell, cameraCell);
+        LosBucketEntry cached = losBucketCache.get(bucket);
+        if (cached != null && cached.expiresAtFrame >= frameIndex && distanceToSqr(from, cached.cameraX, cached.cameraY, cached.cameraZ) <= CAMERA_REUSE_SHIFT_SQ) {
+            losBucketHits++;
+            return cached.visible;
+        }
+
+        losBucketMisses++;
         raycastsThisFrame++;
-        return hasLineOfSight(level, from, sampleX, sampleY, sampleZ, targetBlock, cameraEntity);
+        boolean visible = hasLineOfSight(level, from, sampleX, sampleY, sampleZ, targetBlock, cameraEntity);
+        int ttl = visible ? LOS_VISIBLE_BUCKET_TTL : LOS_HIDDEN_BUCKET_TTL;
+        losBucketCache.put(bucket, new LosBucketEntry(visible, frameIndex + ttl, from.x, from.y, from.z));
+        while (losBucketCache.size() > MAX_SPATIAL_BUCKETS) {
+            losBucketCache.remove(losBucketCache.keySet().iterator().next());
+            losBucketEvictions++;
+        }
+        return visible;
     }
 
     private static boolean hasLineOfSight(Level level, Vec3 from, double sampleX, double sampleY, double sampleZ, BlockPos targetBlock, Entity cameraEntity) {
@@ -272,24 +302,53 @@ public final class VisibilityCuller {
     private static int computeRaycastBudget() {
         Minecraft minecraft = Minecraft.getInstance();
         int fps = minecraft.getFps();
-        if (fps <= 0) {
-            return BASE_MAX_RAYCASTS_PER_FRAME;
+        if (fps > 0) {
+            double frameTime = 1000.0D / fps;
+            smoothedFrameTimeMs = (smoothedFrameTimeMs * BUDGET_SMOOTHING_NUM + frameTime) / BUDGET_SMOOTHING_DEN;
         }
 
-        if (fps < LOW_FPS_THRESHOLD) {
+        if (smoothedFrameTimeMs >= LOW_FRAME_TIME_MS) {
             return MIN_RAYCASTS_PER_FRAME;
         }
 
-        if (fps < MID_FPS_THRESHOLD) {
-            return (BASE_MAX_RAYCASTS_PER_FRAME + MIN_RAYCASTS_PER_FRAME) / 2;
+        if (smoothedFrameTimeMs <= MID_FRAME_TIME_MS) {
+            return BASE_MAX_RAYCASTS_PER_FRAME;
         }
 
-        return BASE_MAX_RAYCASTS_PER_FRAME;
+        double alpha = (LOW_FRAME_TIME_MS - smoothedFrameTimeMs) / (LOW_FRAME_TIME_MS - MID_FRAME_TIME_MS);
+        return (int) Math.round(MIN_RAYCASTS_PER_FRAME + alpha * (BASE_MAX_RAYCASTS_PER_FRAME - MIN_RAYCASTS_PER_FRAME));
     }
 
     public static String debugTelemetry() {
         return "VisibilityCuller{hits=" + cacheHits + ", misses=" + cacheMisses + ", prunes=" + cachePrunes + ", clears=" + cacheClears
-                + ", raycasts=" + raycastsThisFrame + "/" + maxRaycastsThisFrame + "}";
+                + ", raycasts=" + raycastsThisFrame + "/" + maxRaycastsThisFrame + ", samples=" + sampleRequests
+                + ", losHits=" + losBucketHits + ", losMisses=" + losBucketMisses + ", losEvicts=" + losBucketEvictions
+                + ", frameMs=" + smoothedFrameTimeMs + "}";
+    }
+
+
+    private static int resolveSampleCount(AABB box, double distanceSq, boolean item) {
+        if (item) {
+            return FAST_SAMPLE_COUNT;
+        }
+
+        double sizeX = box.maxX - box.minX;
+        double sizeY = box.maxY - box.minY;
+        double sizeZ = box.maxZ - box.minZ;
+        double extentSq = sizeX * sizeX + sizeY * sizeY + sizeZ * sizeZ;
+        if (distanceSq > 1024.0D && extentSq < 4.0D) {
+            return 1;
+        }
+
+        if (distanceSq > 256.0D) {
+            return FAST_SAMPLE_COUNT;
+        }
+
+        return FULL_SAMPLE_COUNT;
+    }
+
+    private static long bucketKey(long objectCell, long cameraCell) {
+        return objectCell * 31L + cameraCell;
     }
 
     private static void pruneCache(Map<?, CacheEntry> cache) {
@@ -322,5 +381,8 @@ public final class VisibilityCuller {
         private boolean matches(int frame, long currentObjectCell, long currentCameraCell) {
             return expiresAtFrame >= frame && objectCell == currentObjectCell && cameraCell == currentCameraCell;
         }
+    }
+
+    private record LosBucketEntry(boolean visible, int expiresAtFrame, double cameraX, double cameraY, double cameraZ) {
     }
 }
