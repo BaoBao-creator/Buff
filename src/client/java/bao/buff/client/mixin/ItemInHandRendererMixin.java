@@ -22,13 +22,4 @@ public abstract class ItemInHandRendererMixin {
             poseStack.scale(BUFF_FIRST_PERSON_ITEM_SCALE, BUFF_FIRST_PERSON_ITEM_SCALE, BUFF_FIRST_PERSON_ITEM_SCALE);
         }
     }
-
-    @Inject(method = "renderItem", at = @At("RETURN"))
-    private void buff$restoreFirstPersonItemScale(LivingEntity entity, ItemStack itemStack, ItemDisplayContext displayContext,
-            PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int packedLight, CallbackInfo ci) {
-        if (displayContext == ItemDisplayContext.FIRST_PERSON_RIGHT_HAND || displayContext == ItemDisplayContext.FIRST_PERSON_LEFT_HAND) {
-            float inverseScale = 1.0F / BUFF_FIRST_PERSON_ITEM_SCALE;
-            poseStack.scale(inverseScale, inverseScale, inverseScale);
-        }
-    }
 }
